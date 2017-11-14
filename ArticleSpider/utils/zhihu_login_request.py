@@ -17,10 +17,10 @@ import json
 
 session = requests.session()
 session.cookies = cookielib.LWPCookieJar(filename="cookies.txt")
-try:
-    session.cookies.load(ignore_discard=True)
-except:
-    print("cookie未能加载")
+# try:
+#     session.cookies.load(ignore_discard=True)
+# except:
+#     print("cookie未能加载")
 
 agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36"
 header = {
@@ -107,6 +107,6 @@ def zhihu_login(account,password):
     response_text = session.post(post_url, headers=header, params=post_data)
     session.cookies.save()
 
-# zhihu_login("17602686137", "AIjd1314")
-get_index()
+zhihu_login("17602686137", "AIjd1314")
+# get_index()
 # is_login()
