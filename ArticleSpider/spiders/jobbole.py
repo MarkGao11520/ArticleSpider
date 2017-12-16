@@ -9,8 +9,9 @@ from scrapy.http import Request
 from urllib import parse
 from scrapy.loader import ItemLoader
 
-from ArticleSpider.items import JobBoleArticleItem, ArticleItemLoader
-from ArticleSpider.utils.common import get_md5
+from items import JobBoleArticleItem, ArticleItemLoader
+from utils.common import get_md5
+
 
 class JobboleSpider(scrapy.Spider):
     name = 'jobbole'

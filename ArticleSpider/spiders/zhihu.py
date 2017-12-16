@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
 import re
-import datetime
 
 try:
     import urlparse as parse
@@ -10,7 +9,8 @@ except:
 
 import scrapy
 from scrapy.loader import ItemLoader
-from ArticleSpider.items import  ZhihuAnswerItem,ZhihuQuestionItem
+from items import ZhihuAnswerItem, ZhihuQuestionItem
+
 
 class ZhihuSpider(scrapy.Spider):
     name = 'zhihu'
@@ -175,7 +175,7 @@ class ZhihuSpider(scrapy.Spider):
     def login_after_captcha(self, respnse):
         pass
 
-    def check_login(self,response):
+    def check_login(self, response):
         # 验证服务器的返回数据判断是否成功
         text_json = json.loads(response.text)
         if "msg" in text_json and text_json["msg"] == "登录成功":

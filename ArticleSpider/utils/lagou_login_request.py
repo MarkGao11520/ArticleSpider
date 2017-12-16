@@ -11,8 +11,6 @@ import json
 
 __author__ = 'gwf'
 
-
-
 session = requests.session()
 session.cookies = cookielib.LWPCookieJar(filename="cookies.txt")
 # try:
