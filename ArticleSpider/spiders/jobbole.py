@@ -7,7 +7,6 @@ import re
 import datetime
 from scrapy.http import Request
 from urllib import parse
-from scrapy.loader import ItemLoader
 
 from items import JobBoleArticleItem, ArticleItemLoader
 from utils.common import get_md5

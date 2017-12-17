@@ -6,6 +6,10 @@
 # http://doc.scrapy.org/en/latest/topics/spider-middleware.html
 
 from scrapy import signals
+from fake_useragent import UserAgent
+from tools.crawel_xici_ip import GetIP
+from scrapy.http import HtmlResponse
+
 
 
 class ArticlespiderSpiderMiddleware(object):
@@ -54,3 +58,38 @@ class ArticlespiderSpiderMiddleware(object):
 
     def spider_opened(self, spider):
         spider.logger.info('Spider opened: %s' % spider.name)
+
+
+class RandomUserAgentMiddlware(object):
+    # 随机更换user-agent
+    def __init__(self, crawler):
+        super(RandomUserAgentMiddlware, self).__init__()
+        self.ua = UserAgent()
+        self.ua_type = crawler.settings.get("RANDOM_UA_TYPE", "random")
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(crawler)
+
+    def process_request(self, request, spider):
+
+        def get_ua():
+            return getattr(self.ua, self.ua_type)
+
+        request.headers.setdefault('User-Agent', get_ua())
+
+
+class RandomProxyMiddleware(object):
+    # 动态设置ip代理
+    def process_request(self, request, spider):
+        get_ip = GetIP()
+        request.meta["proxy"] = get_ip.get_random_ip()
+
+
+class JSPageMiddleware(object):
+
+    def process_request(self, request, spider):
+        spider.browser.get(request.url)
+        print("访问:{0}".format(request.url))
+
+        return HtmlResponse(url=spider.browser.current_url, body=spider.browser.page_source, encoding="utf-8", request=request)
