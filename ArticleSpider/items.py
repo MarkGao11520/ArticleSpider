@@ -210,11 +210,15 @@ class LagouJobItem(scrapy.Item):
     crawl_time = scrapy.Field()
     crawl_update_time = scrapy.Field()
 
+
+
     def get_insert_sql(self):
         insert_sql = """
             insert into lagou_job(title, url, salary, job_city, work_years, degree_need,
             job_type, publish_time, job_advantage, job_desc, job_addr, company_url, company_name, job_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE job_desc=VALUES(job_desc)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE salary=VALUES(salary), job_city=VALUES(job_city), work_years=VALUES(work_years),
+              degree_need=VALUES(degree_need), job_type=VALUES(job_type), publish_time=VALUES(publish_time), tags=VALUES(tags)
+              , job_advantage=VALUES(job_advantage), job_desc=VALUES(job_desc), crawl_time=VALUES(crawl_time)
         """
 
         job_id = extract_num(self["url"])

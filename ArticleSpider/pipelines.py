@@ -52,7 +52,7 @@ class MysqlTwistedPipeline(object):
             use_unicode=True
         )
 
-        dbpool = adbapi.ConnectionPool("MySQLdb",**dbparams)
+        dbpool = adbapi.ConnectionPool("MySQLdb", **dbparams)
 
         return cls(dbpool)
 

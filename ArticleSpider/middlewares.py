@@ -75,8 +75,10 @@ class RandomUserAgentMiddlware(object):
 
         def get_ua():
             return getattr(self.ua, self.ua_type)
-
-        request.headers.setdefault('User-Agent', get_ua())
+        try:
+            request.headers.setdefault('User-Agent', get_ua())
+        except Exception:
+            print('-------------------------')
 
 
 class RandomProxyMiddleware(object):
@@ -87,9 +89,9 @@ class RandomProxyMiddleware(object):
 
 
 class JSPageMiddleware(object):
-
     def process_request(self, request, spider):
-        spider.browser.get(request.url)
-        print("访问:{0}".format(request.url))
+        if spider.name == 'lagou':
+            spider.browser.get(request.url)
+            print("访问:{0}".format(request.url))
 
-        return HtmlResponse(url=spider.browser.current_url, body=spider.browser.page_source, encoding="utf-8", request=request)
+            return HtmlResponse(url=spider.browser.current_url, body=spider.browser.page_source, encoding="utf-8", request=request)
