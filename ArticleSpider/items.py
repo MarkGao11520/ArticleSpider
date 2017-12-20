@@ -7,12 +7,12 @@
 
 import scrapy
 import datetime
-import re
 from scrapy.loader.processors import MapCompose, TakeFirst, Join
 from scrapy.loader import ItemLoader
 
 from utils.common import extract_num
-from settings import SQL_DATETIME_FORMAT,SQL_DATE_FORMAT
+from settings import SQL_DATETIME_FORMAT, SQL_DATE_FORMAT
+from models.es_types import JobboleType, ZhihuAnswerType, ZhihuQuestionType, LagouType
 from w3lib.html import remove_tags
 
 
@@ -23,12 +23,12 @@ class ArticlespiderItem(scrapy.Item):
 
 
 def add_jobbole(value):
-    return value+'-bobby'
+    return value + '-bobby'
 
 
 def date_covert(value):
     try:
-        create_date = datetime.datetime.strptime(value,"%Y/%m/%d").date()
+        create_date = datetime.datetime.strptime(value, "%Y/%m/%d").date()
     except Exception as e:
         create_date = datetime.datetime.now().date()
 
@@ -37,6 +37,7 @@ def date_covert(value):
 
 def replace_splash(value):
     return value.replace("/", "")
+
 
 def handle_strip(value):
     return value.strip()
@@ -53,6 +54,7 @@ def remove_comment_tags(value):
 def return_value(value):
     return value
 
+
 def handle_jobaddr(value):
     addr_list = value.split("\n")
     addr_list = [item.strip() for item in addr_list if item.strip() != "查看地图"]
@@ -66,7 +68,7 @@ class ArticleItemLoader(ItemLoader):
 
 class JobBoleArticleItem(scrapy.Item):
     title = scrapy.Field(
-        input_processor=MapCompose(lambda x:x+"-jobbole",add_jobbole)
+        input_processor=MapCompose(lambda x: x + "-jobbole", add_jobbole)
     )
     create_date = scrapy.Field(
         input_processor=MapCompose(date_covert)
@@ -97,9 +99,29 @@ class JobBoleArticleItem(scrapy.Item):
             insert into jobbole_article
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE content=VALUES(fav_nums)
         """
-        params = (self["title"], self["create_date"], self["url"], self["url_object_id"],self["front_image_url"][0], self["front_image_path"], self["praise_nums"], self["common_nums"], self["fav_nums"], self["tags"], self["content"])
+        params = (self["title"], self["create_date"], self["url"], self["url_object_id"], self["front_image_url"][0],
+                  self["front_image_path"], self["praise_nums"], self["common_nums"], self["fav_nums"], self["tags"],
+                  self["content"])
 
-        return insert_sql,params
+        return insert_sql, params
+
+    def save_to_es(self):
+        article = JobboleType()
+        article.title = self['title']
+        article.create_date = self["create_date"]
+        article.content = remove_tags(self["content"])
+        article.front_image_url = self['front_image_url']
+        if "front_image_path" in self:
+            article.front_image_path = self['front_image_path']
+        article.praise_nums = self['praise_nums']
+        article.fav_nums = self['fav_nums']
+        article.common_nums = self['common_nums']
+        article.url = self['url']
+        article.tags = self['tags']
+        article.meta.id = self['url_object_id']
+
+        article.save()
+        return
 
 
 class ZhihuQuestionItem(scrapy.Item):
@@ -142,6 +164,36 @@ class ZhihuQuestionItem(scrapy.Item):
 
         return insert_sql, params
 
+    def save_to_es(self):
+        if len(self["watch_user_num"]) == 2:
+            watch_user_num = int(self["watch_user_num"][0])
+            click_num = int(self["watch_user_num"][1])
+        else:
+            watch_user_num = int(self["watch_user_num"][0])
+            click_num = 0
+        zhihu_id = self["zhihu_id"][0]
+        topics = ",".join(self["topics"])
+        url = self["url"][0]
+        title = "".join(self["title"])
+        content = "".join(self["content"])
+        answer_num = extract_num("".join(self["answer_num"]))
+        comments_num = extract_num("".join(self["comments_num"]))
+        crawl_time = datetime.datetime.now().strftime(SQL_DATE_FORMAT)
+        article = ZhihuQuestionType()
+        article.meta.id = zhihu_id
+        article.topics = topics
+        article.url = url
+        article.title = title
+        article.content = content
+        article.answer_num = answer_num
+        article.comments_num = comments_num
+        article.watch_user_num = watch_user_num
+        article.click_num = click_num
+        article.crawl_time = crawl_time
+
+        article.save()
+        return
+
 
 class ZhihuAnswerItem(scrapy.Item):
     # 知乎的回答 item
@@ -174,14 +226,32 @@ class ZhihuAnswerItem(scrapy.Item):
 
         return insert_sql, params
 
+    def save_to_es(self):
+        crawl_time = datetime.datetime.now().strftime(SQL_DATE_FORMAT)
+        create_time = datetime.datetime.fromtimestamp(self["create_time"]).strftime(SQL_DATE_FORMAT)
+        update_time = datetime.datetime.fromtimestamp(self["update_time"]).strftime(SQL_DATE_FORMAT)
+        article = ZhihuAnswerType()
+        article.meta.id = self['zhihu_id']
+        article.url = self['url']
+        article.question_id = self['question_id']
+        article.content = self['content']
+        article.praise_num = self['praise_num']
+        article.comments_num = self['comments_num']
+        article.create_time = self["create_time"]
+        article.update_time = self["update_time"]
+        article.crawl_time = crawl_time
+
+        article.save()
+        return
+
 
 class LagouJobItemLoader(ItemLoader):
-    #自定义itemloader
+    # 自定义itemloader
     default_output_processor = TakeFirst()
 
 
 class LagouJobItem(scrapy.Item):
-    #拉勾网职位
+    # 拉勾网职位
     title = scrapy.Field()
     url = scrapy.Field()
     salary = scrapy.Field()
@@ -210,8 +280,6 @@ class LagouJobItem(scrapy.Item):
     crawl_time = scrapy.Field()
     crawl_update_time = scrapy.Field()
 
-
-
     def get_insert_sql(self):
         insert_sql = """
             insert into lagou_job(title, url, salary, job_city, work_years, degree_need,
@@ -223,7 +291,29 @@ class LagouJobItem(scrapy.Item):
 
         job_id = extract_num(self["url"])
         params = (self["title"], self["url"], self["salary"], self["job_city"], self["work_years"], self["degree_need"],
-                  self["job_type"], self["publish_time"], self["job_advantage"], self["job_desc"], self["job_addr"], self["company_url"],
+                  self["job_type"], self["publish_time"], self["job_advantage"], self["job_desc"], self["job_addr"],
+                  self["company_url"],
                   self["company_name"], job_id)
 
         return insert_sql, params
+
+    def save_to_es(self):
+        crawl_time = datetime.datetime.now().strftime(SQL_DATE_FORMAT)
+        job_id = extract_num(self["url"])
+        article = LagouType()
+        article.meta.id = job_id
+        article.title = self['title']
+        article.url = self['url']
+        article.salary = self['salary']
+        article.job_city = self['job_city']
+        article.work_years = self['work_years']
+        article.degree_need = self['degree_need']
+        article.job_type = self['job_type']
+        article.publish_time = self['publish_time']
+        article.job_advantage = self['job_advantage']
+        article.job_desc = self['job_desc']
+        article.job_addr = self['job_addr']
+        article.company_name = self['company_name']
+        article.crawl_time = crawl_time
+        article.crawl_update_time = crawl_time
+        article.save()

@@ -70,9 +70,10 @@ DOWNLOADER_MIDDLEWARES = {
 # See http://scrapy.readthedocs.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
     # 'scrapy.pipelines.images.ImagesPipeline': 1,
-    'ArticleSpider.pipelines.ArticleImagePipeline': 1,
+    # 'ArticleSpider.pipelines.ArticleImagePipeline': 1,
     # 'ArticleSpider.pipelines.JsonExporterPipeline': 2,
-    'ArticleSpider.pipelines.MysqlTwistedPipeline': 2,
+    # 'ArticleSpider.pipelines.MysqlTwistedPipeline': 2,
+    'ArticleSpider.pipelines.ElasticsearchPipeline': 2,
 }
 IMAGES_URLS_FIELD = "front_image_url"
 project_dir = os.path.abspath(os.path.dirname(__file__))
@@ -81,7 +82,7 @@ IMAGES_STORE = os.path.join(project_dir, "images")
 import sys
 BASE_DIR = os.path.dirname(os.path.abspath(os.path.dirname(__file__)))
 print(BASE_DIR)
-sys.path.insert(0,os.path.join(BASE_DIR, "ArticleSpider"))
+sys.path.insert(0, os.path.join(BASE_DIR, "ArticleSpider"))
 
 RANDOM_UA_TYPE = "random"
 # IMAGES_MIN_HEIGHT = 100
@@ -97,7 +98,7 @@ RANDOM_UA_TYPE = "random"
 # each remote server
 #AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
 # Enable showing throttling stats for every response received:
-AUTOTHROTTLE_DEBUG = True
+AUTOTHROTTLE_DEBUG = False
 
 # Enable and configure HTTP caching (disabled by default)
 # See http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings

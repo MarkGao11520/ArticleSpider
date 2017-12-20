@@ -1,21 +1,33 @@
 # -*- coding: utf-8 -*-
 #  re_selector = response.xpath("/html/body/div[1]/div[3]/div[1]/div[1]/h1")
 #  re2_selector = response.xpath('//*[@id="post-88673"]/div[1]/h1/text()')
+# import re
+# import datetime
 
 import scrapy
-import re
-import datetime
 from scrapy.http import Request
 from urllib import parse
 
 from items import JobBoleArticleItem, ArticleItemLoader
+from scrapy.xlib.pydispatch import dispatcher
 from utils.common import get_md5
+from scrapy import signals
 
 
 class JobboleSpider(scrapy.Spider):
     name = 'jobbole'
     allowed_domains = ['blog.jobbole.com']
     start_urls = ['http://blog.jobbole.com/all-posts/']
+
+    # 收集伯乐在线所有404的url以及404页面数
+    handle_httpstatus_list = [404]
+
+    def __init__(self):
+        self.fail_urls = []
+        dispatcher.connect(self.handle_spider_closed, signals.spider_closed)
+
+    def handle_spider_closed(self, spider):
+        self.crawler.stats.set_value("failed_urls", ",".join(self.fail_urls))
 
     def parse(self, response):
         """
@@ -24,6 +36,10 @@ class JobboleSpider(scrapy.Spider):
         """
 
         # 解析列表页中的所有文章url并交给scrapy 下载后并进行解析
+        if response.status == 404:
+            self.fail_urls.append(response.url)
+            self.crawler.stats.inc_value("failed_url")
+
         post_nodes = response.css("#archive .floated-thumb .post-thumb a")
         for post_node in post_nodes:
             image_url = post_node.css("img::attr(src)").extract_first("")
@@ -34,8 +50,6 @@ class JobboleSpider(scrapy.Spider):
         next_url = response.css(".next.page-numbers::attr(href)").extract_first("")
         if next_url:
             yield Request(url=parse.urljoin(response.url,next_url),callback=self.parse)
-
-
 
     def parse_detail(self,response):
         # article_item = JobBoleArticleItem()
