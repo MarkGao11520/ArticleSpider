@@ -20,6 +20,11 @@ class JobboleSpider(RedisSpider):
 
     # start_urls = ['http://blog.jobbole.com/all-posts/']
 
+    custom_settings = {
+        "COOKIES_ENABLED": False,
+        "DOWNLOAD_DELAY": 0
+    }
+
     def __init__(self):
         self.fail_urls = []
         dispatcher.connect(self.handle_spider_closed, signals.spider_closed)

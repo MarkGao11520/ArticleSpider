@@ -22,17 +22,12 @@ es = connections.create_connection(JobboleType._doc_type.using)
 redis_cli = redis.StrictRedis(host="localhost")
 
 
-
-class ArticlespiderItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()dd
-    pass
-
-
+# 追加姓名
 def add_jobbole(value):
-    return value + '-bobby'
+    return value + '-mark'
 
 
+# 日期格式化
 def date_covert(value):
     # TODO create_date转换抛异常
     try:
@@ -43,14 +38,17 @@ def date_covert(value):
     return create_date
 
 
+# "/"替换成""
 def replace_splash(value):
     return value.replace("/", "")
 
 
+# 去掉空格
 def handle_strip(value):
     return value.strip()
 
 
+# 去掉评论tag
 def remove_comment_tags(value):
     # 去掉tags中提取的评论
     if "评论" in value:
@@ -59,18 +57,20 @@ def remove_comment_tags(value):
         return value
 
 
+# 直接返回不做处理
 def return_value(value):
     return value
 
 
+# 处理job地址
 def handle_jobaddr(value):
     addr_list = value.split("\n")
     addr_list = [item.strip() for item in addr_list if item.strip() != "查看地图"]
     return "".join(addr_list)
 
 
+# 根据字符串生成搜索建议数组
 def gen_suggest(index, info_tuple):
-    # 根据字符串生成搜索建议数组
     used_words = set()
     suggests = []
     for text, weight in info_tuple:
@@ -87,11 +87,18 @@ def gen_suggest(index, info_tuple):
     return suggests
 
 
+# 自定义output_processor
 class ArticleItemLoader(ItemLoader):
-    # 自定义output_processor
     default_output_processor = TakeFirst()
 
 
+# 自定义output_processor
+class LagouJobItemLoader(ItemLoader):
+    # 自定义itemloader
+    default_output_processor = TakeFirst()
+
+
+# 伯乐在线 Item
 class JobBoleArticleItem(scrapy.Item):
     title = scrapy.Field(
         input_processor=MapCompose(lambda x: x + "-jobbole", add_jobbole)
@@ -120,6 +127,7 @@ class JobBoleArticleItem(scrapy.Item):
     )
     content = scrapy.Field()
 
+    # 持久化到mysql
     def get_insert_sql(self):
         insert_sql = """
             insert into jobbole_article
@@ -131,6 +139,7 @@ class JobBoleArticleItem(scrapy.Item):
 
         return insert_sql, params
 
+    # 持久化到es
     def save_to_es(self):
         article = JobboleType()
         article.title = self['title']
@@ -153,6 +162,7 @@ class JobBoleArticleItem(scrapy.Item):
         return
 
 
+# 知乎问题的 item
 class ZhihuQuestionItem(scrapy.Item):
     # 知乎的问题 item
     zhihu_id = scrapy.Field()
@@ -194,12 +204,17 @@ class ZhihuQuestionItem(scrapy.Item):
         return insert_sql, params
 
     def save_to_es(self):
-        if len(self["watch_user_num"]) == 2:
-            watch_user_num = int(self["watch_user_num"][0])
-            click_num = int(self["watch_user_num"][1])
-        else:
-            watch_user_num = int(self["watch_user_num"][0])
+        try:
+            if len(self["watch_user_num"]) == 2:
+                watch_user_num = int(self["watch_user_num"][0])
+                click_num = int(self["watch_user_num"][1])
+            else:
+                watch_user_num = int(self["watch_user_num"][0])
+                click_num = 0
+        except:
+            watch_user_num = 0
             click_num = 0
+
         zhihu_id = self["zhihu_id"][0]
         topics = ",".join(self["topics"])
         url = self["url"][0]
@@ -227,8 +242,8 @@ class ZhihuQuestionItem(scrapy.Item):
         return
 
 
+# 知乎的回答 item
 class ZhihuAnswerItem(scrapy.Item):
-    # 知乎的回答 item
     zhihu_id = scrapy.Field()
     url = scrapy.Field()
     question_id = scrapy.Field()
@@ -277,11 +292,7 @@ class ZhihuAnswerItem(scrapy.Item):
         return
 
 
-class LagouJobItemLoader(ItemLoader):
-    # 自定义itemloader
-    default_output_processor = TakeFirst()
-
-
+# 拉钩item
 class LagouJobItem(scrapy.Item):
     # 拉勾网职位
     title = scrapy.Field()

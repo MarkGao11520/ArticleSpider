@@ -1,54 +1,96 @@
 # -*- coding: utf-8 -*-
 import json
 import re
+import scrapy
+import settings
+import time
 
+# 兼容python2和python3的版本
 try:
     import urlparse as parse
 except:
     from urllib import parse
 
-import scrapy
 from scrapy.loader import ItemLoader
 from items import ZhihuAnswerItem, ZhihuQuestionItem
+from selenium import webdriver
+from scrapy.xlib.pydispatch import dispatcher
+from scrapy import signals
+from scrapy_redis.spiders import RedisSpider
+from scrapy_redis.defaults import START_URLS_AS_SET
+from scrapy_redis.utils import bytes_to_str
+from zheye import zheye
 
 
-class ZhihuSpider(scrapy.Spider):
+# 知乎爬虫
+class ZhihuSpider(RedisSpider):
     name = 'zhihu'
     allowed_domains = ['www.zhihu.com']
-    start_urls = ['http://www.zhihu.com/']
+    redis_key = "zhihu:start_url"
 
-    # question的第一页 answer url
-    start_answer_url = 'https://www.zhihu.com/api/v4/questions/{0}/answers?sort_by=default&include=data%5B%2A%5D.is_normal%2Cadmin_closed_comment%2Creward_info%2Cis_collapsed%2Cannotation_action%2Cannotation_detail%2Ccollapse_reason%2Cis_sticky%2Ccollapsed_by%2Csuggest_edit%2Ccomment_count%2Ccan_comment%2Ccontent%2Ceditable_content%2Cvoteup_count%2Creshipment_settings%2Ccomment_permission%2Ccreated_time%2Cupdated_time%2Creview_info%2Cquestion%2Cexcerpt%2Crelationship.is_authorized%2Cis_author%2Cvoting%2Cis_thanked%2Cis_nothelp%2Cupvoted_followees%3Bdata%5B%2A%5D.mark_infos%5B%2A%5D.url%3Bdata%5B%2A%5D.author.follower_count%2Cbadge%5B%3F%28type%3Dbest_answerer%29%5D.topics&limit={1}&offset={2}'
+    start_urls = ['https://www.zhihu.com']
 
-    # agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36"
+    # question的回答分页列表的REST_API
+    start_answer_url = 'https://www.zhihu.com/api/v4/questions/{' \
+                       '0}/answers?sort_by=default&include=data%5B%2A%5D.is_normal%2Cadmin_closed_comment' \
+                       '%2Creward_info%2Cis_collapsed%2Cannotation_action%2Cannotation_detail%2Ccollapse_reason' \
+                       '%2Cis_sticky%2Ccollapsed_by%2Csuggest_edit%2Ccomment_count%2Ccan_comment%2Ccontent' \
+                       '%2Ceditable_content%2Cvoteup_count%2Creshipment_settings%2Ccomment_permission%2Ccreated_time' \
+                       '%2Cupdated_time%2Creview_info%2Cquestion%2Cexcerpt%2Crelationship.is_authorized%2Cis_author' \
+                       '%2Cvoting%2Cis_thanked%2Cis_nothelp%2Cupvoted_followees%3Bdata%5B%2A%5D.mark_infos%5B%2A%5D' \
+                       '.url%3Bdata%5B%2A%5D.author.follower_count%2Cbadge%5B%3F%28type%3Dbest_answerer%29%5D.topics' \
+                       '&limit={1}&offset={2} '
+
+    # 请求头伪造
     headers = {
         "HOST": "www.zhihu.com",
         "Referer": "https://www.zhihu.com",
-        'User-Agent': ""
+        'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:57.0) Gecko/20100101 Firefox/57.0"
     }
 
+    # 自定义配置
+    custom_settings = {
+        "AUTOTHROTTLE_ENABLED": True,
+        "DOWNLOAD_DELAY": 0.8,
+    }
+
+    def __init__(self):
+        self.browser = webdriver.Chrome(executable_path=settings.SELENIUM_DRIVER_PATH)
+        super(ZhihuSpider, self).__init__()
+        dispatcher.connect(self.spider_closed, signals.spider_closed)
+
+    def spider_closed(self):
+        # 当爬虫退出的时候关闭chrome
+        print("spider closed")
+        self.browser.quit()
+
+    # 深度优先遍历
     def parse(self, response):
         """
         提取出html页面中的所有url 并跟踪这些url进行一步爬取
         如果提取的url中格式伪/question/xx 就下载之后直接进入解析函数
         """
 
+        # 获取所有a 标签 href属性
         all_urls = response.css("a::attr(href)").extract()
+        # 组装绝对路径url
         all_urls = [parse.urljoin(response.url, url) for url in all_urls]
+        # 去掉非https的url
         all_urls = filter(lambda x: True if x.startswith("https") else False, all_urls)
+        # 遍历所有的url
         for url in all_urls:
+            # 匹配问题url
             match_obj = re.match("(.*zhihu.com/question/(\d+))(/|$).*", url)
             if match_obj:
-                # 如果提取到question相关的页面则下载后交由提取函数进行处理
+                # 如果提取到question相关的页面则下载后交由回答提取函数进行处理
                 request_url = match_obj.group(1)
                 yield scrapy.Request(request_url, headers=self.headers, callback=self.parse_question)
             else:
                 # 如果不是question则直接进一步跟踪
-                # pass
                 yield scrapy.Request(url, headers=self.headers, callback=self.parse)
 
+    # 处理question页面，从页面中提取出具体的question item
     def parse_question(self, response):
-        # 处理question页面，从页面中提取出具体的question item
         match_obj = re.match("(.*zhihu.com/question/(\d+))(/|$).*", response.url)
         if match_obj:
             question_id = int(match_obj.group(2))
@@ -84,13 +126,19 @@ class ZhihuSpider(scrapy.Spider):
 
             question_item = item_loader.load_item()
 
-        yield scrapy.Request(self.start_answer_url.format(question_id, 20, 0),headers=self.headers, callback=self.parse_answer)
+        # 提取第一页回答列表，交给parse_answer
+        yield scrapy.Request(self.start_answer_url.format(question_id, 20, 0),
+                             headers=self.headers, callback=self.parse_answer)
+        # 处理item
         yield question_item
 
+    # 处理回答url
     def parse_answer(self, response):
-        # 处理question的answer
+        # 回答列表返回json结果，所以将字符串转换为json结构
         ans_json = json.loads(response.text)
+        # 获取是否为最后一页
         is_end = ans_json["paging"]["is_end"]
+        # 获取下一页url
         next_url = ans_json["paging"]["next"]
 
         # 提取answer字段
@@ -105,79 +153,59 @@ class ZhihuSpider(scrapy.Spider):
             answer_item["comments_num"] = answer["comment_count"]
             answer_item["create_time"] = answer["created_time"]
             answer_item["update_time"] = answer["updated_time"]
-
+            # 处理item
             yield answer_item
 
+        # 如果不是最后一页，则处理下一页
         if not is_end:
             yield scrapy.Request(next_url, headers=self.headers, callback=self.parse_answer)
 
+    # spider的主入口
     def start_requests(self):
-        # 入口
-        return [scrapy.Request('https://www.zhihu.com/#signin', headers=self.headers, callback=self.login)]
+        cookie_dict = {}
+        # 1.加载要操作的页面
+        self.browser.get("https://www.zhihu.com/signin")
 
-    def login(self, response):
-        match_obj = re.match('.*name="_xsrf" value="(.*?)"', response.text,re.DOTALL)
-        xsrf = ''
-        if match_obj:
-            xsrf = (match_obj.group(1))
-        if xsrf:
-            post_data = {
-                "_xsrf": xsrf,
-                "phone_num": "17602686137",
-                "password": "AIjd1314",
-                "captcha": ""
-            }
-            import time
-            t = str(int(time.time() * 1000))
-            # captcha_url = "https://www.zhihu.com/captcha.gif?r={0}&type=login".format(t)
-            captcha_url_cn = "https://www.zhihu.com/captcha.gif?r={0}&type=login&lang=cn".format(t)
-            yield scrapy.Request(captcha_url_cn, headers=self.headers, meta={"post_data":post_data}, callback=self.login_after_captcha_cn)
-            # yield scrapy.Request(captcha_url,headers=self.headers,meta={"post_data":post_data},callback=self.login_after_captcha)
+        # 2.登录操作
+        self.browser.find_element_by_css_selector("input[name='username']").send_keys(settings.ZHIHU_PHONE_NUMBER)
+        self.browser.find_element_by_css_selector("input[name='password']").send_keys(settings.ZHIHU_PASSWORD)
+        self.browser.find_element_by_css_selector("button[type='submit']").click()
 
-    def login_after_captcha_cn(self,response):
-        # 知乎倒立汉字验证码识别登录
-        with open("captcha.jpg","wb") as f:
-            f.write(response.body)
-            f.closed
+        # 3.等待browser处理完成
+        time.sleep(2)
 
-        from zheye import zheye
-        z = zheye()
-        positions = z.Recognize('captcha.jpg')
+        # 4.将cookie写入字典
+        for i in self.browser.get_cookies():
+            cookie_dict[i["name"]] = i["value"]
 
-        pos_arr = []
-        if len(positions) == 2:
-            if positions[0][1] > positions[1][1]:
-                pos_arr.append([positions[1][1],positions[1][0]])
-                pos_arr.append([positions[0][1],positions[0][0]])
+        # browser.close()
+        return self.next_request(cookie_dict)
+        # return [scrapy.Request(url=self.start_urls[0], headers=self.headers, cookies=cookie_dict,
+        # callback=self.parse)]
+
+    # 登录成功后从redis中拿数据
+    def next_request(self, cookie_dict):
+        """Returns a request to be scheduled or none."""
+        use_set = self.settings.getbool('REDIS_START_URLS_AS_SET', START_URLS_AS_SET)
+        fetch_one = self.server.spop if use_set else self.server.lpop
+        # XXX: Do we need to use a timeout here?
+        found = 0
+        # TODO: Use redis pipeline execution.
+        while found < self.redis_batch_size:
+            data = fetch_one(self.redis_key)
+            if not data:
+                # Queue empty.
+                break
+            req = self.make_request_from_data(data)
+            if req:
+                url = bytes_to_str(data, self.redis_encoding)
+                yield [scrapy.Request(url=url, headers=self.headers, cookies=cookie_dict, callback=self.parse)]
+                found += 1
             else:
-                pos_arr.append([positions[0][1],positions[0][0]])
-                pos_arr.append([positions[1][1],positions[1][0]])
-        else:
-            pos_arr.append([positions[0][1], positions[0][0]])
+                self.logger.debug("Request not made from data: %r", data)
 
-        post_url = "https://www.zhihu.com/login/phone_num"
-        post_data = response.meta.get("post_data",{})
-        if len(positions) == 2:
-            post_data["captcha"] = '{"img_size": [200,44],"input_points": [[%.2f,%f],[%.2f,%f]]}' % (
-                pos_arr[0][0] / 2, pos_arr[0][1] / 2, pos_arr[1][0] / 2, pos_arr[1][1] / 2)
-        else:
-            post_data["captcha"] = '{"img_size": [200,44],"input_points": [[%.2f,%f]]}' % (
-                pos_arr[0][0] / 2, pos_arr[0][1] / 2)
-        post_data["captcha_type"] = "cn"
+        if found:
+            self.logger.debug("Read %s requests from '%s'", found, self.redis_key)
 
-        return [scrapy.FormRequest(
-            url=post_url,
-            formdata=post_data,
-            headers=self.headers,
-            callback=self.check_login
-        )]
-
-    def login_after_captcha(self, respnse):
-        pass
-
-    def check_login(self, response):
-        # 验证服务器的返回数据判断是否成功
-        text_json = json.loads(response.text)
-        if "msg" in text_json and text_json["msg"] == "登录成功":
-            for url in self.start_urls:
-                yield scrapy.Request(url, dont_filter=True, headers=self.headers)
+        if found:
+            self.logger.debug("Read %s requests from '%s'", found, self.redis_key)
