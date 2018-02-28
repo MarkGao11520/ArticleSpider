@@ -215,12 +215,16 @@ class ZhihuQuestionItem(scrapy.Item):
             watch_user_num = 0
             click_num = 0
 
+        try:
+            answer_num = extract_num("".join(self["answer_num"]))
+        except:
+            answer_num = 0
+
         zhihu_id = self["zhihu_id"][0]
         topics = ",".join(self["topics"])
         url = self["url"][0]
         title = "".join(self["title"])
         content = "".join(self["content"])
-        answer_num = extract_num("".join(self["answer_num"]))
         comments_num = extract_num("".join(self["comments_num"]))
         crawl_time = datetime.datetime.now().strftime(SQL_DATE_FORMAT)
         article = ZhihuQuestionType()

@@ -1,109 +1,63 @@
 # -*- coding: utf-8 -*-
-import time
-
-import scrapy
-import settings
-from scrapy import signals
 from scrapy.linkextractors import LinkExtractor
-from scrapy.spiders import CrawlSpider, Rule
-from scrapy.xlib.pydispatch import dispatcher
-from selenium import webdriver
+from scrapy.spiders import Rule
 
-from items import LagouJobItem, LagouJobItemLoader
+from ArticleSpider.items import LagouJobItemLoader, LagouJobItem
 from scrapy_redis.spiders import RedisCrawlSpider
-from scrapy_redis.defaults import START_URLS_AS_SET
-from scrapy_redis.utils import bytes_to_str
-from pyvirtualdisplay import Display
 
 
-# 拉钩爬虫
-class LagouSpider(RedisCrawlSpider):
+class lagouSpider(RedisCrawlSpider):
     name = 'lagou'
     allowed_domains = ['www.lagou.com']
-    # start_urls = ['https://www.lagou.com']
-    # 请求头
-    headers = {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2",
-        "Cache-Control": "max-age=0",
-        "Connection": "keep-alive",
-        "Host": "www.lagou.com",
-        "Upgrade-Insecure-Requests": "1",
-        'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:57.0) Gecko/20100101 Firefox/57.0",
-    }
-    # 自定义配置
+    redis_key = "lagou:start_url"
+    # start_urls = ['https://www.lagou.com/']
+    agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/" \
+            "537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.36"
+
+    # if not settings, it will be redirect to login
     custom_settings = {
-        "AUTOTHROTTLE_ENABLED": True,
-        # "DOWNLOAD_DELAY": 0.8,
+        "COOKIES_ENABLED": False,
+        "DOWNLOAD_DELAY": 1,
+        'DEFAULT_REQUEST_HEADERS': {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'zh-CN,zh;q=0.8',
+            'Connection': 'keep-alive',
+            'Cookie': 'JSESSIONID=ABAAABAAAFCAAEGBC99154D1A744BD8AD12BA0DEE80F320; showExpriedIndex=1; '
+                      'showExpriedCompanyHome=1; showExpriedMyPublish=1; hasDeliver=0; '
+                      '_ga=GA1.2.1111395267.1516570248; _gid=GA1.2.1409769975.1516570248; '
+                      'user_trace_token=20180122053048-58e2991f-fef2-11e7-b2dc-525400f775ce; PRE_UTM=; '
+                      'LGUID=20180122053048-58e29cd9-fef2-11e7-b2dc-525400f775ce; '
+                      'index_location_city=%E5%85%A8%E5%9B%BD; X_HTTP_TOKEN=7e9c503b9a29e06e6d130f153c562827; _gat=1; '
+                      'LGSID=20180122055709-0762fae6-fef6-11e7-b2e0-525400f775ce; PRE_HOST=github.com; '
+                      'PRE_SITE=https%3A%2F%2Fgithub.com%2Fconghuaicai%2Fscrapy-spider-templetes; '
+                      'PRE_LAND=https%3A%2F%2Fwww.lagou.com%2Fjobs%2F4060662.html; '
+                      'Hm_lvt_4233e74dff0ae5bd0a3d81c6ccf756e6=1516569758,1516570249,1516570359,1516571830; '
+                      '_putrc=88264D20130653A0; login=true; unick=%E7%94%B0%E5%B2%A9; '
+                      'gate_login_token=3426bce7c3aa91eec701c73101f84e2c7ca7b33483e39ba5; '
+                      'LGRID=20180122060053-8c9fb52e-fef6-11e7-a59f-5254005c3644; '
+                      'Hm_lpvt_4233e74dff0ae5bd0a3d81c6ccf756e6=1516572053; TG-TRACK-CODE=index_navigation; '
+                      'SEARCH_ID=a39c9c98259643d085e917c740303cc7',
+            'Host': 'www.lagou.com',
+            'Origin': 'https://www.lagou.com',
+            'Referer': 'https://www.lagou.com/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                          'Chrome/61.0.3163.100 Safari/537.36',
+        }
     }
 
-    # 爬取规则
     rules = (
-        Rule(LinkExtractor(allow=("zhaopin/.*",)), follow=True),
-        Rule(LinkExtractor(allow=("gongsi/j/d+.html",)), follow=True),
-        Rule(LinkExtractor(allow=(r'jobs/\d+.html',)), callback='parse_job'),
+        # Rule(LinkExtractor(allow=('zhaopin/.*',)), follow=True),
+        # Rule(LinkExtractor(allow=('gongsi/j\d+.html',)), follow=True),
+        Rule(LinkExtractor(allow=r'jobs/\d+.html'), callback='parse_job', follow=True),
     )
 
-    # 构造函数
-    def __init__(self):
-        # 参数
-        chrome_opt = webdriver.ChromeOptions()
-        # 不加载图片
-        # prefs = {"profile.managed_default_content_settings.images": 2}
-        # chrome_opt.add_experimental_option("prefs",prefs)
-        # 初始化selenium
-        self.browser = webdriver.Chrome(executable_path=settings.SELENIUM_DRIVER_PATH, chrome_options=chrome_opt)
-
-        super(LagouSpider, self).__init__()
-        dispatcher.connect(self.spider_closed, signals.spider_closed)
-
-    # 爬取关闭事件
-    def spider_closed(self,spider):
-        # 当爬虫退出的时候关闭chrome
-        print("spider closed")
-        self.browser.quit()
-
-    # 重写入口函数
-    def start_requests(self):
-        cookie_dict = {}
-        self.browser.get("https://passport.lagou.com/login/login.html")
-        self.browser.find_element_by_css_selector(".active input[placeholder='请输入常用手机号/邮箱']").send_keys(settings.LAGOU_PHONE_NUMBER)
-        self.browser.find_element_by_css_selector(".active input[placeholder='请输入密码']").send_keys(settings.LAGOU_PASSWORD)
-        self.browser.find_element_by_css_selector(".active  input.btn_green").click()
-        time.sleep(2)
-
-        for i in self.browser.get_cookies():
-            cookie_dict[i["name"]] = i["value"]
-        return self.next_requests(cookie_dict)
-
-    # 登录成功后从redis中拿数据
-    def next_requests(self,cookie_dict):
-        """Returns a request to be scheduled or none."""
-        use_set = self.settings.getbool('REDIS_START_URLS_AS_SET', START_URLS_AS_SET)
-        fetch_one = self.server.spop if use_set else self.server.lpop
-        # XXX: Do we need to use a timeout here?
-        found = 0
-        # TODO: Use redis pipeline execution.
-        while found < self.redis_batch_size:
-            data = fetch_one(self.redis_key)
-            if not data:
-                # Queue empty.
-                break
-            req = self.make_request_from_data(data)
-            if req:
-                url = bytes_to_str(data, self.redis_encoding)
-                yield [scrapy.Request(url=url, headers=self.headers, cookies=cookie_dict, callback=self.parse)]
-                found += 1
-            else:
-                self.logger.debug("Request not made from data: %r", data)
-
-        if found:
-            self.logger.debug("Read %s requests from '%s'", found, self.redis_key)
-
-    # 爬虫工作内容网页并传给item
     def parse_job(self, response):
-
+        """
+        解析拉勾网的职位
+        :param response:
+        :return:
+        """
         item_loader = LagouJobItemLoader(item=LagouJobItem(), response=response)
         item_loader.add_css("title", ".job-name span::text")
         item_loader.add_value("url", response.url)
@@ -124,4 +78,3 @@ class LagouSpider(RedisCrawlSpider):
         job_item = item_loader.load_item()
 
         return job_item
-

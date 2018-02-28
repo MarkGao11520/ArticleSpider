@@ -29,7 +29,7 @@ ROBOTSTXT_OBEY = False
 DOWNLOADER_MIDDLEWARES = {
     'ArticleSpider.middlewares.RandomUserAgentMiddlware': 100,
     # 'ArticleSpider.middlewares.RandomProxyMiddleware': 200,
-    'ArticleSpider.middlewares.JSPageMiddleware': 300,
+    # 'ArticleSpider.middlewares.JSPageMiddleware': 300,
 }
 
 # ITEM 管道

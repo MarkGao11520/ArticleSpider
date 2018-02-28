@@ -13,14 +13,22 @@ except:
 
 from scrapy.loader import ItemLoader
 from items import ZhihuAnswerItem, ZhihuQuestionItem
+from selenium import webdriver
+from scrapy.xlib.pydispatch import dispatcher
+from scrapy import signals
+from scrapy_redis.spiders import RedisSpider
+from scrapy_redis.defaults import START_URLS_AS_SET
+from scrapy_redis.utils import bytes_to_str
 from zheye import zheye
 
 
-# 知乎爬虫
-class ZhihuSpider(scrapy.Spider):
-    name = 'zhihu_zheye.py'
+# 知乎爬虫_使用selenium
+class ZhihuSpider(RedisSpider):
+    name = 'zhihu_selenium'
     allowed_domains = ['www.zhihu.com']
-    start_urls = ['http://www.zhihu.com/']
+    redis_key = "zhihu:start_url"
+
+    start_urls = ['https://www.zhihu.com']
 
     # question的回答分页列表的REST_API
     start_answer_url = 'https://www.zhihu.com/api/v4/questions/{' \
@@ -37,8 +45,24 @@ class ZhihuSpider(scrapy.Spider):
     headers = {
         "HOST": "www.zhihu.com",
         "Referer": "https://www.zhihu.com",
-        'User-Agent': ""
+        'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:57.0) Gecko/20100101 Firefox/57.0"
     }
+
+    # 自定义配置
+    custom_settings = {
+        "AUTOTHROTTLE_ENABLED": True,
+        "DOWNLOAD_DELAY": 0.8,
+    }
+
+    def __init__(self):
+        self.browser = webdriver.Chrome(executable_path=settings.SELENIUM_DRIVER_PATH)
+        super(ZhihuSpider, self).__init__()
+        dispatcher.connect(self.spider_closed, signals.spider_closed)
+
+    def spider_closed(self):
+        # 当爬虫退出的时候关闭chrome
+        print("spider closed")
+        self.browser.quit()
 
     # 深度优先遍历
     def parse(self, response):
@@ -136,86 +160,52 @@ class ZhihuSpider(scrapy.Spider):
         if not is_end:
             yield scrapy.Request(next_url, headers=self.headers, callback=self.parse_answer)
 
+    # spider的主入口
     def start_requests(self):
-        # 入口将登陆界面下载后交给login方法处理
-        return [scrapy.Request('https://www.zhihu.com/#signin', headers=self.headers, callback=self.login)]
+        cookie_dict = {}
+        # 1.加载要操作的页面
+        self.browser.get("https://www.zhihu.com/signin")
 
-    # 登陆方法
-    def login(self, response):
-        # 获取_xsrf隐藏字段
-        match_obj = re.match('.*name="_xsrf" value="(.*?)"', response.text, re.DOTALL)
-        xsrf = ''
+        # 2.登录操作
+        self.browser.find_element_by_css_selector("input[name='username']").send_keys(settings.ZHIHU_PHONE_NUMBER)
+        self.browser.find_element_by_css_selector("input[name='password']").send_keys(settings.ZHIHU_PASSWORD)
+        self.browser.find_element_by_css_selector("button[type='submit']").click()
 
-        # 判断是否取到值
-        if match_obj:
-            xsrf = (match_obj.group(1))
-        # 只有取到xsrf才进行下面的登录请求
-        if xsrf:
-            # post请求参数
-            post_data = {
-                "_xsrf": xsrf,
-                "phone_num": settings.ZHIHU_PHONE_NUMBER,
-                "password": settings.ZHIHU_PASSWORD,
-                "captcha": ""
-            }
-            # 获取当前时间戳
-            t = str(int(time.time() * 1000))
-            # 获取验证码图片url
-            captcha_url_cn = "https://www.zhihu.com/captcha.gif?r={0}&type=login&lang=cn".format(t)
-            # 处理知乎倒立汉字验证码识别登录
-            yield scrapy.Request(captcha_url_cn, headers=self.headers, meta={"post_data": post_data}, callback=self.login_after_captcha_cn)
+        # 3.等待browser处理完成
+        time.sleep(2)
 
-    # 知乎倒立汉字验证码识别登录
-    def login_after_captcha_cn(self, response):
-        # 创建captcha.jpg并将response中的图片写入
-        with open("captcha.jpg", "wb") as f:
-            f.write(response.body)
-            f.closed
+        # 4.将cookie写入字典
+        for i in self.browser.get_cookies():
+            cookie_dict[i["name"]] = i["value"]
 
-        # 创建zheye对象
-        z = zheye()
-        # 识别倒立验证码位置
-        positions = z.Recognize('captcha.jpg')
-        # 将位置信息进行包装，包装成二元数组
-        pos_arr = []
-        if len(positions) == 2:
-            if positions[0][1] > positions[1][1]:
-                pos_arr.append([positions[1][1],positions[1][0]])
-                pos_arr.append([positions[0][1],positions[0][0]])
+        # browser.close()
+        return self.next_request(cookie_dict)
+        # return [scrapy.Request(url=self.start_urls[0], headers=self.headers, cookies=cookie_dict,
+        # callback=self.parse)]
+
+    # 登录成功后从redis中拿数据
+    def next_request(self, cookie_dict):
+        """Returns a request to be scheduled or none."""
+        use_set = self.settings.getbool('REDIS_START_URLS_AS_SET', START_URLS_AS_SET)
+        fetch_one = self.server.spop if use_set else self.server.lpop
+        # XXX: Do we need to use a timeout here?
+        found = 0
+        # TODO: Use redis pipeline execution.
+        while found < self.redis_batch_size:
+            data = fetch_one(self.redis_key)
+            if not data:
+                # Queue empty.
+                break
+            req = self.make_request_from_data(data)
+            if req:
+                url = bytes_to_str(data, self.redis_encoding)
+                yield [scrapy.Request(url=url, headers=self.headers, cookies=cookie_dict, callback=self.parse)]
+                found += 1
             else:
-                pos_arr.append([positions[0][1],positions[0][0]])
-                pos_arr.append([positions[1][1],positions[1][0]])
-        else:
-            pos_arr.append([positions[0][1], positions[0][0]])
+                self.logger.debug("Request not made from data: %r", data)
 
-        # 登录请求
-        post_url = "https://www.zhihu.com/login/phone_num"
-        # 从meta中拿到上一个方法包装的请求数据
-        post_data = response.meta.get("post_data", {})
-        # 判断是两个字还是一个字
-        if len(positions) == 2:
-            post_data["captcha"] = '{"img_size": [200,44],"input_points": [[%.2f,%f],[%.2f,%f]]}' % (
-                pos_arr[0][0] / 2, pos_arr[0][1] / 2, pos_arr[1][0] / 2, pos_arr[1][1] / 2)
-        else:
-            post_data["captcha"] = '{"img_size": [200,44],"input_points": [[%.2f,%f]]}' % (
-                pos_arr[0][0] / 2, pos_arr[0][1] / 2)
-        post_data["captcha_type"] = "cn"
+        if found:
+            self.logger.debug("Read %s requests from '%s'", found, self.redis_key)
 
-        # 模拟登录请求，成功后进入check_login方法
-        return [scrapy.FormRequest(
-            url=post_url,
-            formdata=post_data,
-            headers=self.headers,
-            callback=self.check_login
-        )]
-
-    def login_after_captcha(self, respnse):
-        pass
-
-    # 验证服务器的返回数据判断是否成功
-    def check_login(self, response):
-        text_json = json.loads(response.text)
-        if "msg" in text_json and text_json["msg"] == "登录成功":
-            # 如果成功则正是开始进行下载，并设置header
-            for url in self.start_urls:
-                yield scrapy.Request(url, dont_filter=True, headers=self.headers)
+        if found:
+            self.logger.debug("Read %s requests from '%s'", found, self.redis_key)
