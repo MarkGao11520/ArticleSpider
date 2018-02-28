@@ -7,6 +7,7 @@
 
 import scrapy
 import datetime
+import redis
 from scrapy.loader.processors import MapCompose, TakeFirst, Join
 from scrapy.loader import ItemLoader
 
@@ -14,6 +15,12 @@ from utils.common import extract_num
 from settings import SQL_DATETIME_FORMAT, SQL_DATE_FORMAT
 from models.es_types import JobboleType, ZhihuAnswerType, ZhihuQuestionType, LagouType
 from w3lib.html import remove_tags
+
+from elasticsearch_dsl.connections import connections
+es = connections.create_connection(JobboleType._doc_type.using)
+
+redis_cli = redis.StrictRedis(host="localhost")
+
 
 
 class ArticlespiderItem(scrapy.Item):
@@ -27,6 +34,7 @@ def add_jobbole(value):
 
 
 def date_covert(value):
+    # TODO create_date转换抛异常
     try:
         create_date = datetime.datetime.strptime(value, "%Y/%m/%d").date()
     except Exception as e:
@@ -59,6 +67,24 @@ def handle_jobaddr(value):
     addr_list = value.split("\n")
     addr_list = [item.strip() for item in addr_list if item.strip() != "查看地图"]
     return "".join(addr_list)
+
+
+def gen_suggest(index, info_tuple):
+    # 根据字符串生成搜索建议数组
+    used_words = set()
+    suggests = []
+    for text, weight in info_tuple:
+        if text:
+            # 调用es的analyze接口分析字符串
+            words = es.indices.analyze(index=index, analyzer="ik_max_word", params={'filter': ["lowercase"]}, body=text)
+            analyzed_words = set([r["token"] for r in words["tokens"] if len(r["token"]) > 1])
+            new_words = analyzed_words - used_words
+        else:
+            new_words = set()
+        if new_words:
+            suggests.append({"input": list(new_words), "weight": weight})
+
+    return suggests
 
 
 class ArticleItemLoader(ItemLoader):
@@ -120,7 +146,10 @@ class JobBoleArticleItem(scrapy.Item):
         article.tags = self['tags']
         article.meta.id = self['url_object_id']
 
+        article.suggest = gen_suggest(JobboleType._doc_type.index, ((article.title, 10), (article.tags, 7)))
+
         article.save()
+        redis_cli.incr("jobbole_count")
         return
 
 
@@ -191,6 +220,9 @@ class ZhihuQuestionItem(scrapy.Item):
         article.click_num = click_num
         article.crawl_time = crawl_time
 
+        article.suggest = gen_suggest(ZhihuQuestionType._doc_type.index, ((article.title, 10), (article.content, 9)))
+
+        redis_cli.incr("zhihu_count")
         article.save()
         return
 
@@ -234,7 +266,7 @@ class ZhihuAnswerItem(scrapy.Item):
         article.meta.id = self['zhihu_id']
         article.url = self['url']
         article.question_id = self['question_id']
-        article.content = self['content']
+        article.content = remove_tags(self['content'])
         article.praise_num = self['praise_num']
         article.comments_num = self['comments_num']
         article.create_time = self["create_time"]
@@ -316,4 +348,8 @@ class LagouJobItem(scrapy.Item):
         article.company_name = self['company_name']
         article.crawl_time = crawl_time
         article.crawl_update_time = crawl_time
+
+        article.suggest = gen_suggest(LagouType._doc_type.index, ((article.title, 10), (article.company_name, 9), (article.job_desc, 8), (article.job_addr, 7)))
+
+        redis_cli.incr("lagou_count")
         article.save()

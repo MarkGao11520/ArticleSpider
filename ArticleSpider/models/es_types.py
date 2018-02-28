@@ -4,13 +4,22 @@ from datetime import datetime
 from elasticsearch_dsl import DocType, Date, Nested, Boolean, \
     analyzer, InnerObjectWrapper, Completion, Keyword, Text, Integer
 
+from elasticsearch_dsl.analysis import CustomAnalyzer as _CustomAnalyzer
 from elasticsearch_dsl.connections import connections
-
 connections.create_connection(hosts=["localhost"])
 
 
+class CustomAnalyzer(_CustomAnalyzer):
+    def get_analysis_definition(self):
+        return {}
+
+
+ik_analyzer = CustomAnalyzer("ik_max_word", filter=["lowercase"])
+
+
+# 伯乐在线文字类型
 class JobboleType(DocType):
-    # 伯乐在线文字类型
+    suggest = Completion(analyzer=ik_analyzer)
     title = Text(analyzer="ik_max_word")
     create_date = Date()
     url = Keyword()
@@ -28,8 +37,9 @@ class JobboleType(DocType):
         doc_type = "article"
 
 
+# 知乎问题文字类型
 class ZhihuQuestionType(DocType):
-    # 知乎问题文字类型
+    suggest = Completion(analyzer=ik_analyzer)
     zhihu_id = Keyword()
     topics = Text(analyzer="ik_max_word")
     url = Keyword()
@@ -46,8 +56,8 @@ class ZhihuQuestionType(DocType):
         doc_type = "article"
 
 
+# 知乎回答文字类型
 class ZhihuAnswerType(DocType):
-    # 知乎回答文字类型
 
     zhihu_id = Keyword()
     url = Keyword()
@@ -64,14 +74,14 @@ class ZhihuAnswerType(DocType):
         index = "zhihu_answer"
         doc_type = "article"
 
-
+ # 拉勾网职位
 class LagouType(DocType):
-    # 拉勾网职位
+    suggest = Completion(analyzer=ik_analyzer)
     title = Text(analyzer="ik_max_word")
     url = Keyword()
     salary = Keyword()
-    job_city = Text(analyzer="ik_max_word")
-    work_years = Text(analyzer="ik_max_word")
+    job_city = Keyword()
+    work_years = Keyword()
     degree_need = Keyword()
     job_type = Text(analyzer="ik_max_word")
     publish_time = Keyword()
@@ -89,7 +99,7 @@ class LagouType(DocType):
 
 
 if __name__ == "__main__":
-    # JobboleType.init()
-    # ZhihuAnswerType.init()
+    JobboleType.init()
     # ZhihuQuestionType.init()
-    LagouType.init()
+    # ZhihuAnswerType.init()
+    # LagouType.init()
