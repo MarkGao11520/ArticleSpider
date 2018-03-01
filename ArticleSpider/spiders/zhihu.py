@@ -8,9 +8,10 @@ import scrapy
 import time
 
 from scrapy.loader import ItemLoader
-from scrapy.spiders import Rule
+from scrapy.spiders import Rule, CrawlSpider
 
 from ArticleSpider.items import ZhihuQuestionItem, ZhihuAnswerItem
+# TODO 换成Redis分布式爬虫
 from scrapy_redis.spiders import RedisCrawlSpider
 from scrapy.linkextractors import LinkExtractor
 
@@ -21,11 +22,12 @@ except:
     from urllib import parse
 
 
-class ZhihuSpider(RedisCrawlSpider):
+class ZhihuSpider(CrawlSpider):
     name = 'zhihu'
-    redis_key = "zhihu:start_url"
+    # TODO 换成Redis分布式爬虫
+    # redis_key = "zhihu:start_urls"
     allowed_domains = ['www.zhihu.com']
-    # start_urls = ['http://www.zhihu.com/']
+    start_urls = ['http://www.zhihu.com/']
 
     # question的第一页answer的请求url
     start_answer_url = "https://www.zhihu.com/api/v4/questions/{" \
@@ -175,6 +177,7 @@ class ZhihuSpider(RedisCrawlSpider):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36'
         }
         print("登录成功")
-        self.next_requests()
-        # yield scrapy.Request(url=HomeUrl, headers=headers, callback=self.parse)
+        # TODO 换成Redis分布式爬虫
+        # self.next_requests()
+        yield scrapy.Request(url=HomeUrl, headers=headers, callback=self.parse)
 

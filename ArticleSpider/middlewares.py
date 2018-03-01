@@ -20,10 +20,12 @@ class RandomUserAgentMiddlware(object):
         self.ua = UserAgent()
         self.ua_type = crawler.settings.get("RANDOM_UA_TYPE", "random")
 
+    # 定义这个方法，Scrapy会把当前的爬虫传递到方法里来
     @classmethod
     def from_crawler(cls, crawler):
         return cls(crawler)
 
+    # 处理request请求
     def process_request(self, request, spider):
 
         def get_ua():

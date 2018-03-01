@@ -14,14 +14,16 @@ def get_md5(url):
 
 def extract_num(text):
     # 从字符串中提取数字
-    match_re = re.match(".*?(\d+).*", text)
-    if match_re:
-        nums = int(match_re.group(1))
-    else:
+    try:
+        match_re = re.match(".*?(\d+).*", text)
+        if match_re:
+            nums = int(match_re.group(1))
+        else:
+            nums = 0
+    except Exception:
         nums = 0
-
     return nums
 
 
 if __name__ == "__main__":
-    print (get_md5("http://jobbole.com".encode("utf-8")))
+    print(get_md5("http://jobbole.com".encode("utf-8")))

@@ -4,6 +4,7 @@
 #
 # See documentation in:
 # http://doc.scrapy.org/en/latest/topics/items.html
+import re
 
 import scrapy
 import datetime
@@ -22,9 +23,15 @@ es = connections.create_connection(JobboleType._doc_type.using)
 redis_cli = redis.StrictRedis(host="localhost")
 
 
-# 追加姓名
-def add_jobbole(value):
-    return value + '-mark'
+# 获取字符串内数字方法
+def get_nums(value):
+    match_re = re.match(".*?(\d+).*", value)
+    if match_re:
+        nums = int(match_re.group(1))
+    else:
+        nums = 0
+
+    return nums
 
 
 # 日期格式化
@@ -36,6 +43,14 @@ def date_covert(value):
         create_date = datetime.datetime.now().date()
 
     return create_date
+
+
+def exclude_none(value):
+    if value:
+        return value
+    else:
+        value = "无"
+        return value
 
 
 # "/"替换成""
@@ -100,9 +115,7 @@ class LagouJobItemLoader(ItemLoader):
 
 # 伯乐在线 Item
 class JobBoleArticleItem(scrapy.Item):
-    title = scrapy.Field(
-        input_processor=MapCompose(lambda x: x + "-jobbole", add_jobbole)
-    )
+    title = scrapy.Field()
     create_date = scrapy.Field(
         input_processor=MapCompose(date_covert)
     )
@@ -169,7 +182,9 @@ class ZhihuQuestionItem(scrapy.Item):
     topics = scrapy.Field()
     url = scrapy.Field()
     title = scrapy.Field()
-    content = scrapy.Field()
+    content = scrapy.Field(
+        input_processor=MapCompose(exclude_none),
+    )
     answer_num = scrapy.Field()
     comments_num = scrapy.Field()
     watch_user_num = scrapy.Field()
@@ -185,18 +200,31 @@ class ZhihuQuestionItem(scrapy.Item):
               watch_user_num=VALUES(watch_user_num), click_num=VALUES(click_num)
         """
         zhihu_id = self["zhihu_id"][0]
-        topics = ",".join(self["topics"])
         url = self["url"][0]
         title = "".join(self["title"])
         content = "".join(self["content"])
-        answer_num = extract_num("".join(self["answer_num"]))
         comments_num = extract_num("".join(self["comments_num"]))
-        if len(self["watch_user_num"]) == 2:
-            watch_user_num = int(self["watch_user_num"][0])
-            click_num = int(self["watch_user_num"][1])
-        else:
-            watch_user_num = int(self["watch_user_num"][0])
+
+        try:
+            topics = ",".join(self["topics"])
+        except Exception:
+            topics = ""
+
+        try:
+            answer_num = extract_num("".join(self["answer_num"]))
+        except:
+            answer_num = 0
+
+        try:
+            if len(self["watch_user_num"]) == 2:
+                watch_user_num = int(self["watch_user_num"][0])
+                click_num = int(self["watch_user_num"][1])
+            else:
+                watch_user_num = int(self["watch_user_num"][0])
+                click_num = 0
+        except:
             click_num = 0
+            watch_user_num = 0
         # crawl_time = datetime.datetime.now().strftime(SQL_DATETIME_FORMAT)
 
         params = (comments_num, answer_num, click_num, zhihu_id, watch_user_num, url, title, topics, content)
@@ -211,9 +239,15 @@ class ZhihuQuestionItem(scrapy.Item):
             else:
                 watch_user_num = int(self["watch_user_num"][0])
                 click_num = 0
-        except:
+            topics = ",".join(self["topics"])
+        except Exception:
             watch_user_num = 0
             click_num = 0
+
+        try:
+            topics = ",".join(self["topics"])
+        except Exception:
+            topics = ""
 
         try:
             answer_num = extract_num("".join(self["answer_num"]))
@@ -221,11 +255,11 @@ class ZhihuQuestionItem(scrapy.Item):
             answer_num = 0
 
         zhihu_id = self["zhihu_id"][0]
-        topics = ",".join(self["topics"])
         url = self["url"][0]
         title = "".join(self["title"])
         content = "".join(self["content"])
         comments_num = extract_num("".join(self["comments_num"]))
+
         crawl_time = datetime.datetime.now().strftime(SQL_DATE_FORMAT)
         article = ZhihuQuestionType()
         article.meta.id = zhihu_id
@@ -288,8 +322,8 @@ class ZhihuAnswerItem(scrapy.Item):
         article.content = remove_tags(self['content'])
         article.praise_num = self['praise_num']
         article.comments_num = self['comments_num']
-        article.create_time = self["create_time"]
-        article.update_time = self["update_time"]
+        article.create_time = create_time
+        article.update_time = update_time
         article.crawl_time = crawl_time
 
         article.save()

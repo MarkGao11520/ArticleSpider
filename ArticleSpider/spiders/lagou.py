@@ -8,8 +8,8 @@ from scrapy_redis.spiders import RedisCrawlSpider
 
 class lagouSpider(RedisCrawlSpider):
     name = 'lagou'
-    allowed_domains = ['www.lagou.com']
-    redis_key = "lagou:start_url"
+    redis_key = "lagou:start_urls"
+    # allowed_domains = ['www.lagou.com']
     # start_urls = ['https://www.lagou.com/']
     agent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/" \
             "537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.36"

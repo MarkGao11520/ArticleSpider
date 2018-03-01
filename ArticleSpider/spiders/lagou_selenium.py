@@ -2,18 +2,17 @@
 import time
 
 import scrapy
-import settings
 from scrapy import signals
 from scrapy.linkextractors import LinkExtractor
-from scrapy.spiders import CrawlSpider, Rule
+from scrapy.spiders import Rule
 from scrapy.xlib.pydispatch import dispatcher
 from selenium import webdriver
 
+import settings
 from items import LagouJobItem, LagouJobItemLoader
-from scrapy_redis.spiders import RedisCrawlSpider
 from scrapy_redis.defaults import START_URLS_AS_SET
+from scrapy_redis.spiders import RedisCrawlSpider
 from scrapy_redis.utils import bytes_to_str
-from pyvirtualdisplay import Display
 
 
 # 拉钩爬虫
@@ -49,9 +48,20 @@ class LagouSpider(RedisCrawlSpider):
     def __init__(self):
         # 参数
         chrome_opt = webdriver.ChromeOptions()
-        # 不加载图片
-        # prefs = {"profile.managed_default_content_settings.images": 2}
-        # chrome_opt.add_experimental_option("prefs",prefs)
+
+        """
+        不加载图片
+        prefs = {"profile.managed_default_content_settings.images": 2}
+        chrome_opt.add_experimental_option("prefs",prefs)
+        """
+
+        """
+        linux下无浏览器的selenium使用
+        from pyvirtualdisplay import Display
+        display = Display(visible=0, size=(800, 600))
+        display.start()
+        """
+
         # 初始化selenium
         self.browser = webdriver.Chrome(executable_path=settings.SELENIUM_DRIVER_PATH, chrome_options=chrome_opt)
 

@@ -4,7 +4,6 @@ import os
 import sys
 
 #############################项目配置开始######################################
-
 # 项目名
 BOT_NAME = 'ArticleSpider'
 
@@ -20,26 +19,26 @@ sys.path.insert(0, os.path.join(BASE_DIR, "ArticleSpider"))
 
 # 默认会过滤掉不符合ROBOTSTXT协议的url
 ROBOTSTXT_OBEY = False
-
 #############################项目配置结束######################################
 
-#############################组件配置开始######################################
 
+#############################组件配置开始######################################
 # 下载服务管理器
 DOWNLOADER_MIDDLEWARES = {
     'ArticleSpider.middlewares.RandomUserAgentMiddlware': 100,
     # 'ArticleSpider.middlewares.RandomProxyMiddleware': 200,
     # 'ArticleSpider.middlewares.JSPageMiddleware': 300,
+    'ScrapyRedisTest.middlewares.MyCustomDownloaderMiddleware': None,
 }
 
 # ITEM 管道
 ITEM_PIPELINES = {
     # 'scrapy.pipelines.images.ImagesPipeline': 1,
-    # 'ArticleSpider.pipelines.ArticleImagePipeline': 1,
+    'ArticleSpider.pipelines.ArticleImagePipeline': 1,
     # 'ArticleSpider.pipelines.JsonExporterPipeline': 2,
-    # 'ArticleSpider.pipelines.MysqlTwistedPipeline': 2,
+    'ArticleSpider.pipelines.MysqlTwistedPipeline': 2,
     'scrapy_redis.pipelines.RedisPipeline': 300,
-    'ArticleSpider.pipelines.ElasticsearchPipeline': 400,
+    # 'ArticleSpider.pipelines.ElasticsearchPipeline': 400,
 }
 
 # 指定scrapy_redis分布式爬虫调度器
@@ -50,8 +49,8 @@ DUPEFILTER_CLASS = "scrapy_redis.dupefilter.RFPDupeFilter"
 
 #############################组件配置结束######################################
 
-#############################反爬虫配置开始######################################
 
+#############################反爬虫配置开始######################################
 # 是否启用cookie
 COOKIES_ENABLED = True
 
@@ -62,7 +61,6 @@ COOKIES_ENABLED = True
 AUTOTHROTTLE_DEBUG = True
 
 # DOWNLOAD_DELAY = 3
-
 #############################反爬虫配置结束######################################
 
 
@@ -94,8 +92,5 @@ ZHIHU_PASSWORD = "AIjd1314"
 # 拉钩登录账号
 LAGOU_PHONE_NUMBER = "18299536448"
 LAGOU_PASSWORD = "zdj515158."
-
-
-
 #############################自定义属性结束######################################
 

@@ -53,12 +53,12 @@ class ZhihuQuestionType(DocType):
 
     class Meta:
         index = "zhihu_question"
-        doc_type = "article"
+        doc_type = "question"
 
 
 # 知乎回答文字类型
 class ZhihuAnswerType(DocType):
-
+    suggest = Completion(analyzer=ik_analyzer)
     zhihu_id = Keyword()
     url = Keyword()
     question_id = Keyword()
@@ -72,9 +72,10 @@ class ZhihuAnswerType(DocType):
 
     class Meta:
         index = "zhihu_answer"
-        doc_type = "article"
+        doc_type = "question"
 
- # 拉勾网职位
+
+# 拉勾网职位
 class LagouType(DocType):
     suggest = Completion(analyzer=ik_analyzer)
     title = Text(analyzer="ik_max_word")
@@ -84,22 +85,21 @@ class LagouType(DocType):
     work_years = Keyword()
     degree_need = Keyword()
     job_type = Text(analyzer="ik_max_word")
-    publish_time = Keyword()
-    job_advantage = Keyword()
+    publish_time = Text(analyzer="ik_max_word")
+    job_advantage = Text(analyzer="ik_max_word")
     job_desc = Text(analyzer="ik_max_word")
     job_addr = Text(analyzer="ik_max_word")
     company_name = Text(analyzer="ik_max_word")
     company_url = Keyword()
     crawl_time = Date()
-    crawl_update_time = Date()
 
     class Meta:
         index = "lagou"
-        doc_type = "article"
+        doc_type = "job"
 
 
 if __name__ == "__main__":
     JobboleType.init()
-    # ZhihuQuestionType.init()
-    # ZhihuAnswerType.init()
-    # LagouType.init()
+    ZhihuQuestionType.init()
+    ZhihuAnswerType.init()
+    LagouType.init()
